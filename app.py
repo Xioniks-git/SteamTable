@@ -108,26 +108,21 @@ def extract_price(entry):
     return ""
 
 
-def fetch_prices_for_country(app_ids, country_code, batch_size=25):
+def fetch_prices_for_country(app_ids, country_code):
     result = {}
-    uncached = []
 
     for app_id in app_ids:
         cache_key = f"{app_id}:{country_code}"
         cached = get_cache(cache_key)
         if cached is not None:
             result[app_id] = cached
-        else:
-            uncached.append(app_id)
-
-    for i in range(0, len(uncached), batch_size):
-        chunk = uncached[i:i + batch_size]
+            continue
 
         try:
             response = session.get(
                 STEAM_URL,
                 params={
-                    "appids": ",".join(chunk),
+                    "appids": app_id,
                     "cc": country_code,
                     "l": "en",
                 },
@@ -135,33 +130,28 @@ def fetch_prices_for_country(app_ids, country_code, batch_size=25):
             )
 
             if response.status_code == 403:
-                print(f"403 Forbidden for cc={country_code}, appids={chunk}")
-                for app_id in chunk:
-                    result[app_id] = ""
-                time.sleep(2)
+                print(f"403 Forbidden for cc={country_code}, appid={app_id}")
+                result[app_id] = ""
+                time.sleep(1.5)
                 continue
 
             if response.status_code != 200:
-                print(f"HTTP {response.status_code} for cc={country_code}, appids={chunk}")
-                for app_id in chunk:
-                    result[app_id] = ""
-                time.sleep(2)
+                print(f"HTTP {response.status_code} for cc={country_code}, appid={app_id}")
+                result[app_id] = ""
+                time.sleep(1.5)
                 continue
 
             payload = response.json()
+            value = extract_price(payload.get(app_id))
+            result[app_id] = value
+            set_cache(cache_key, value)
 
-            for app_id in chunk:
-                value = extract_price(payload.get(app_id))
-                result[app_id] = value
-                set_cache(f"{app_id}:{country_code}", value)
-
-            time.sleep(0.4)
+            time.sleep(0.35)
 
         except Exception as e:
-            print(f"Request error for cc={country_code}, appids={chunk}: {e}")
-            for app_id in chunk:
-                result[app_id] = ""
-            time.sleep(2)
+            print(f"Request error for cc={country_code}, appid={app_id}: {e}")
+            result[app_id] = ""
+            time.sleep(1.5)
 
     return result
 
